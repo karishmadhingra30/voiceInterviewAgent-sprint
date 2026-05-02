@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PressClub — Interview Results</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0a0a0a; color: #f0f0f0;
+      min-height: 100vh; padding: 40px 16px;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    header { margin-bottom: 32px; }
+    header h1 { font-size: 1.6rem; font-weight: 700; }
+    header p { color: #666; font-size: 0.9rem; margin-top: 4px; }
+    .tabs {
+      display: flex; gap: 4px; margin-bottom: 24px;
+      border-bottom: 1px solid #222; padding-bottom: 0;
+    }
+    .tab-btn {
+      background: none; border: none; color: #666; font-size: 0.9rem;
+      padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent;
+      margin-bottom: -1px; transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn.active { color: #fff; border-bottom-color: #fff; }
+    .tab-btn:hover:not(.active) { color: #aaa; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .card {
+      background: #141414; border: 1px solid #2a2a2a; border-radius: 12px; padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; color: #ddd; }
+    .scorecard-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .scorecard-table th {
+      text-align: left; color: #666; font-weight: 500;
+      padding: 8px 12px; border-bottom: 1px solid #222;
+    }
+    .scorecard-table td { padding: 10px 12px; border-bottom: 1px solid #1a1a1a; vertical-align: top; }
+    .scorecard-table tr:last-child td { border-bottom: none; }
+    .badge {
+      display: inline-block; padding: 2px 10px; border-radius: 100px;
+      font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+    }
+    .badge.confirmed { background: #1a2e1a; color: #88dd88; border: 1px solid #363; }
+    .badge.unconfirmed { background: #1a1a1a; color: #666; border: 1px solid #2a2a2a; }
+    .badge.needs-follow-up { background: #2e2a1a; color: #ddbb88; border: 1px solid #443; }
+    .prose {
+      font-size: 0.9rem; line-height: 1.8; color: #ccc;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .prose h2 { font-size: 1rem; color: #fff; margin: 20px 0 8px; border-top: 1px solid #222; padding-top: 16px; }
+    .prose h2:first-child { margin-top: 0; border-top: none; padding-top: 0; }
+    .prose h3 { font-size: 0.9rem; color: #ddd; margin: 14px 0 6px; }
+    .prose ul { padding-left: 18px; }
+    .prose li { margin-bottom: 4px; }
+    .actions { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+    button.action {
+      background: #1a1a1a; border: 1px solid #333; color: #ddd;
+      padding: 10px 20px; border-radius: 8px; font-size: 0.875rem;
+      cursor: pointer; transition: background 0.15s;
+    }
+    button.action:hover { background: #2a2a2a; }
+    button.action.primary { background: #fff; color: #0a0a0a; border-color: #fff; }
+    button.action.primary:hover { background: #ddd; }
+    .loading-state { text-align: center; padding: 60px; color: #555; }
+    .spinner {
+      display: inline-block; width: 20px; height: 20px;
+      border: 2px solid #222; border-top-color: #555;
+      border-radius: 50%; animation: spin 0.7s linear infinite; margin-bottom: 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty { color: #555; font-size: 0.9rem; padding: 24px 0; text-align: center; }
+    .signal-label { color: #aaa; font-size: 0.8rem; }
+    .pitch-box {
+      background: #0a0e1a; border: 1px solid #1a2a4a; border-radius: 8px;
+      padding: 16px 20px; margin-bottom: 12px;
+    }
+    .pitch-box p { font-size: 0.9rem; line-height: 1.7; color: #bcd; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Interview Results</h1>
+      <p id="session-label">Loading...</p>
+    </header>
+
+    <div id="loading-state" class="loading-state">
+      <div class="spinner"></div>
+      <p>Synthesis agent is processing your interview...</p>
+      <p style="font-size:0.8rem;color:#444;margin-top:8px">This usually takes 20–30 seconds after the call ends.</p>
+    </div>
+
+    <div id="results-content" style="display:none">
+      <div class="actions">
+        <button class="action primary" id="download-btn">⬇ Download output.md</button>
+        <button class="action" id="copy-btn">Copy to Clipboard</button>
+        <a href="/static/index.html">
+          <button class="action">+ New Interview</button>
+        </a>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="scorecard">Scorecard</button>
+        <button class="tab-btn" data-tab="notes">Full Output</button>
+        <button class="tab-btn" data-tab="transcript">Transcript</button>
+      </div>
+
+      <!-- Scorecard tab -->
+      <div class="tab-panel active" id="tab-scorecard">
+        <div class="card">
+          <h2>Newsworthy Signal Scorecard</h2>
+          <table class="scorecard-table">
+            <thead>
+              <tr>
+                <th>Signal</th>
+                <th>Status</th>
+                <th>Evidence</th>
+              </tr>
+            </thead>
+            <tbody id="scorecard-body">
+            </tbody>
+          </table>
+        </div>
+        <div class="card" id="pitch-card">
+          <h2>Recommended Pitch Angle</h2>
+          <div id="pitch-content"><div class="empty">No pitch angle extracted yet.</div></div>
+        </div>
+      </div>
+
+      <!-- Full output tab -->
+      <div class="tab-panel" id="tab-notes">
+        <div class="card">
+          <div class="prose" id="full-output"></div>
+        </div>
+      </div>
+
+      <!-- Transcript tab -->
+      <div class="tab-panel" id="tab-transcript">
+        <div class="card">
+          <div class="prose" id="transcript-text"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    document.getElementById('session-label').textContent =
+      sessionId ? `Session: ${sessionId.slice(0, 8)}...` : 'No session ID';
+
+    // Tab switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+      });
+    });
+
+    const SIGNAL_LABELS = {
+      funding: 'Funding',
+      product_world_first: 'Product — World-First',
+      product_world_best: 'Product — World-Best',
+      traction_revenue: 'Traction — Revenue',
+      traction_growth: 'Traction — Growth',
+      traction_quality: 'Traction — Customer Quality',
+      founder_uniqueness: 'Founder Uniqueness',
+      insight_contrarian: 'Insight — Contrarian',
+    };
+
+    function parseScorecardFromOutput(output) {
+      // Parse structured scorecard section from output.md markdown
+      const rows = [];
+      const lines = output.split('\n');
+      let inScorecard = false;
+
+      for (const line of lines) {
+        if (/##\s*newsworthy scorecard/i.test(line)) { inScorecard = true; continue; }
+        if (inScorecard && /^##\s/.test(line)) { inScorecard = false; continue; }
+        if (!inScorecard) continue;
+
+        // Match patterns like: - **Funding**: confirmed — "we raised $5M"
+        const m = line.match(/[-*]\s+\*{0,2}([^*:]+)\*{0,2}[:\s]+`?(confirmed|unconfirmed|needs[- ]follow[- ]up)`?[:\s—–]*(.*)/i);
+        if (m) {
+          rows.push({
+            signal: m[1].trim(),
+            status: m[2].toLowerCase().replace(/\s+/g, '-'),
+            evidence: m[3].trim().replace(/^[""]|[""]$/g, ''),
+          });
+        }
+      }
+      return rows;
+    }
+
+    function parsePitchFromOutput(output) {
+      const m = output.match(/##\s*recommended pitch angle\n([\s\S]*?)(?=\n##|$)/i);
+      return m ? m[1].trim() : null;
+    }
+
+    function renderScorecard(rows) {
+      const tbody = document.getElementById('scorecard-body');
+      tbody.innerHTML = '';
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty">No scorecard data parsed from output.</td></tr>';
+        return;
+      }
+
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        const statusClass = row.status.includes('confirmed') && !row.status.includes('un') ? 'confirmed'
+          : row.status.includes('unconfirmed') ? 'unconfirmed' : 'needs-follow-up';
+        const label = SIGNAL_LABELS[row.signal.toLowerCase().replace(/\s+/g, '_')] || row.signal;
+        tr.innerHTML = `
+          <td class="signal-label">${label}</td>
+          <td><span class="badge ${statusClass}">${row.status.replace(/-/g, ' ')}</span></td>
+          <td style="color:#aaa;font-size:0.82rem">${row.evidence || '—'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderPitch(pitch) {
+      const el = document.getElementById('pitch-content');
+      if (!pitch) { el.innerHTML = '<div class="empty">No pitch angle in output yet.</div>'; return; }
+      el.innerHTML = `<div class="pitch-box"><p>${pitch.replace(/\n/g, '<br>')}</p></div>`;
+    }
+
+    let outputText = '';
+
+    async function loadResults() {
+      if (!sessionId) return;
+
+      for (let attempt = 0; attempt < 20; attempt++) {
+        try {
+          const res = await fetch(`/results/${sessionId}`);
+          const data = await res.json();
+
+          if (data.output) {
+            outputText = data.output;
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('results-content').style.display = 'block';
+
+            const scorecard = parseScorecardFromOutput(data.output);
+            renderScorecard(scorecard);
+            renderPitch(parsePitchFromOutput(data.output));
+
+            document.getElementById('full-output').textContent = data.output;
+            document.getElementById('transcript-text').textContent =
+              data.transcript || '(No transcript received yet)';
+            return;
+          }
+        } catch (_) {}
+
+        await new Promise(r => setTimeout(r, 4000));
+      }
+
+      document.getElementById('loading-state').innerHTML =
+        '<p style="color:#ff8888">Synthesis is taking longer than expected. <a href="#" onclick="location.reload()" style="color:#88aaff">Refresh</a> to check again.</p>';
+    }
+
+    document.getElementById('download-btn').addEventListener('click', () => {
+      const blob = new Blob([outputText], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pressclub-output-${sessionId?.slice(0, 8) || 'interview'}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('copy-btn').addEventListener('click', async () => {
+      await navigator.clipboard.writeText(outputText);
+      const btn = document.getElementById('copy-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 2000);
+    });
+
+    loadResults();
+  </script>
+</body>
+</html>

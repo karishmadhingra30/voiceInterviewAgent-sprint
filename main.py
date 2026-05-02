@@ -41,8 +41,11 @@ OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
 ## Pydantic Models — use Field(default_factory=list/dict) for mutable defaults
 class ResearchRequest(BaseModel):
-    folder_path: str
-    session_id: str = ""
+    company_url: str = ""
+    linkedin_url: str = ""
+    transcript_text: str = ""
+    context_text: str = ""
+    folder_path: str = ""  # kept for curl/API testing
 
 
 class ResearchResponse(BaseModel):
@@ -90,10 +93,22 @@ async def async_exists(path: Path) -> bool:
 
 
 ## Background Task
-async def run_research_background(folder_path: str, session_id: str) -> None:
+async def run_research_background(
+    folder_path: str,
+    session_id: str,
+    transcript_text: str = "",
+    context_text: str = "",
+    company_url: str = "",
+    linkedin_url: str = "",
+) -> None:
     """
     Runs research agent in background. Called by BackgroundTasks.
     Status file is set to processing in start_research before this runs.
+
+    If folder_path is set (API testing), uses that directory as input.
+    Otherwise materializes transcript_text into data/outputs/{session_id}_input,
+    builds Context.txt from context_text plus optional company_url / linkedin_url,
+    and runs research on that folder.
 
     Saves:
       data/outputs/{session_id}_status.txt   → ready or error (processing set earlier)
@@ -107,7 +122,23 @@ async def run_research_background(folder_path: str, session_id: str) -> None:
 
         from agents.research_agent import run_research
 
-        briefing_doc = await run_research(folder_path, session_id)
+        if folder_path:
+            research_folder = folder_path
+        else:
+            temp_folder = OUTPUTS_DIR / f"{session_id}_input"
+            await asyncio.to_thread(temp_folder.mkdir, parents=True, exist_ok=True)
+            await async_write(temp_folder / "1st Meeting.txt", transcript_text)
+            context_content = context_text or ""
+            if company_url:
+                context_content += f"\nCompany website: {company_url}"
+            if linkedin_url:
+                context_content += f"\nLinkedIn: {linkedin_url}"
+
+            if context_content.strip():
+                await async_write(temp_folder / "Context.txt", context_content.strip())
+            research_folder = str(temp_folder)
+
+        briefing_doc = await run_research(research_folder, session_id)
 
         await async_write(
             briefing_path,
@@ -146,19 +177,29 @@ async def start_research(
     so the first poll never gets a 404.
     Poll /research/status/{session_id} every 3 seconds until ready.
     """
-    session_id = request.session_id or str(uuid.uuid4())[:8]
+    session_id = str(uuid.uuid4())[:8]
     status_path = OUTPUTS_DIR / f"{session_id}_status.txt"
-    folder = Path(request.folder_path)
+    folder_path = request.folder_path.strip()
+    transcript_text = request.transcript_text
 
-    if not await async_exists(folder):
+    if folder_path:
+        folder = Path(folder_path)
+        if not await async_exists(folder):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Folder not found: {folder_path}",
+            )
+        if not await asyncio.to_thread(folder.is_dir):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Not a directory: {folder_path}",
+            )
+    elif transcript_text.strip():
+        folder_path = ""
+    else:
         raise HTTPException(
             status_code=400,
-            detail=f"Folder not found: {request.folder_path}",
-        )
-    if not await asyncio.to_thread(folder.is_dir):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Not a directory: {request.folder_path}",
+            detail="Provide folder_path (API testing) or transcript_text (UI).",
         )
 
     # Write status file BEFORE adding background task — prevents race condition
@@ -166,14 +207,19 @@ async def start_research(
 
     background_tasks.add_task(
         run_research_background,
-        request.folder_path,
+        folder_path,
         session_id,
+        transcript_text,
+        request.context_text,
+        request.company_url,
+        request.linkedin_url,
     )
 
+    log_folder = folder_path or f"{session_id}_input (from transcript)"
     logger.info(
         "[OK] Research queued session=%s folder=%s",
         session_id,
-        request.folder_path,
+        log_folder,
     )
 
     return ResearchResponse(
@@ -346,9 +392,15 @@ async def vapi_webhook(request: Request):
 
     async def run_synthesis_with_logging() -> None:
         try:
-            from agents.synthesis_agent import synthesize
+            from agents.synthesis_agent import run_synthesis_agent
 
-            await synthesize(session_id, transcript)
+            # Load briefing doc for this session
+            briefing_path = OUTPUTS_DIR / f"{session_id}_briefing.json"
+            briefing_doc = {}
+            if await async_exists(briefing_path):
+                briefing_doc = json.loads(await async_read(briefing_path))
+
+            await run_synthesis_agent(transcript, briefing_doc)
         except Exception as exc:
             logger.error(
                 "[ERROR] Synthesis failed session=%s: %s",
@@ -374,11 +426,17 @@ async def get_results(session_id: str):
     if await async_exists(briefing_path):
         briefing_doc = json.loads(await async_read(briefing_path))
 
+    transcript_path = OUTPUTS_DIR / f"{session_id}_transcript.txt"
+    transcript = ""
+    if await async_exists(transcript_path):
+        transcript = await async_read(transcript_path)
+
     return {
         "status": "ready",
         "session_id": session_id,
         "output": await async_read(output_path),
         "briefing_doc": briefing_doc,
+        "transcript": transcript,
     }
 
 

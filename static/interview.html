@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PressClub — Live Interview</title>
+  <script src="https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #f0f0f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 16px;
+    }
+    header { text-align: center; margin-bottom: 32px; }
+    header h1 { font-size: 1.6rem; font-weight: 700; }
+    header p { color: #666; font-size: 0.9rem; margin-top: 6px; }
+    .card {
+      background: #141414;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 32px;
+      width: 100%;
+      max-width: 520px;
+      text-align: center;
+    }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 16px; border-radius: 100px; font-size: 0.85rem; font-weight: 500;
+      margin-bottom: 28px;
+    }
+    .status-pill.idle { background: #1a1a1a; border: 1px solid #333; color: #888; }
+    .status-pill.connecting { background: #1a1a2e; border: 1px solid #334; color: #88aaff; }
+    .status-pill.active { background: #1a2e1a; border: 1px solid #363; color: #88dd88; }
+    .status-pill.ended { background: #2e1a1a; border: 1px solid #433; color: #ff8888; }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+    }
+    .dot.pulse { animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+    .avatar {
+      width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 24px;
+      background: #1e1e1e; border: 2px solid #333;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem;
+      transition: border-color 0.3s;
+    }
+    .avatar.speaking { border-color: #88dd88; box-shadow: 0 0 0 4px rgba(136,221,136,0.15); }
+    .vol-bars {
+      display: flex; align-items: flex-end; gap: 3px; height: 28px;
+      justify-content: center; margin: 0 auto 24px; opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .vol-bars.visible { opacity: 1; }
+    .bar {
+      width: 4px; border-radius: 2px; background: #88dd88;
+      animation: none; min-height: 4px;
+    }
+    .bar.animate { animation: bounce 0.5s ease-in-out infinite alternate; }
+    .bar:nth-child(2) { animation-delay: 0.1s; }
+    .bar:nth-child(3) { animation-delay: 0.2s; }
+    .bar:nth-child(4) { animation-delay: 0.1s; }
+    @keyframes bounce { from { height: 4px; } to { height: 24px; } }
+    .transcript-area {
+      background: #0a0a0a; border: 1px solid #222; border-radius: 8px;
+      padding: 14px; height: 160px; overflow-y: auto; text-align: left;
+      font-size: 0.85rem; line-height: 1.6; color: #999; margin-bottom: 24px;
+    }
+    .transcript-area .line { margin-bottom: 6px; }
+    .transcript-area .agent { color: #88aaff; }
+    .transcript-area .user { color: #f0f0f0; }
+    .controls { display: flex; gap: 12px; justify-content: center; }
+    button {
+      border: none; border-radius: 8px; padding: 12px 24px;
+      font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
+    }
+    #start-btn { background: #fff; color: #0a0a0a; }
+    #start-btn:hover { background: #ddd; }
+    #start-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+    #end-btn { background: #2e1a1a; color: #ff8888; border: 1px solid #433; display: none; }
+    #end-btn:hover { background: #3e2a2a; }
+    .timer { font-size: 0.85rem; color: #555; margin-top: 16px; font-variant-numeric: tabular-nums; }
+    .post-call { display: none; text-align: center; }
+    .post-call p { color: #888; margin-bottom: 20px; }
+    .post-call a {
+      display: inline-block; background: #fff; color: #0a0a0a;
+      padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;
+    }
+    .post-call a:hover { background: #ddd; }
+    .spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid #334; border-top-color: #88aaff;
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg { color: #ff8888; font-size: 0.85rem; margin-top: 12px; display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Live Interview</h1>
+    <p id="session-label">Loading session...</p>
+  </header>
+
+  <div class="card" id="call-card">
+    <div class="status-pill idle" id="status-pill">
+      <span class="dot"></span>
+      <span id="status-text">Ready to connect</span>
+    </div>
+
+    <div class="avatar" id="avatar">🎙️</div>
+
+    <div class="vol-bars" id="vol-bars">
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+
+    <div class="transcript-area" id="transcript">
+      <div class="line" style="color:#555">Transcript will appear here during the call...</div>
+    </div>
+
+    <div class="controls">
+      <button id="start-btn">Start Interview</button>
+      <button id="end-btn">End Call</button>
+    </div>
+
+    <div class="timer" id="timer"></div>
+    <div class="error-msg" id="error-msg"></div>
+  </div>
+
+  <div class="card post-call" id="post-call-card">
+    <div style="font-size:2rem;margin-bottom:16px">✅</div>
+    <h2 style="margin-bottom:8px">Interview Complete</h2>
+    <p>The synthesis agent is analyzing your transcript. Results will be ready in about 30 seconds.</p>
+    <a id="results-link" href="#">View Results →</a>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+
+    if (!sessionId) {
+      document.getElementById('session-label').textContent = 'No session ID — go back and run research first.';
+    } else {
+      document.getElementById('session-label').textContent = `Session: ${sessionId.slice(0, 8)}...`;
+    }
+
+    let vapi = null;
+    let callActive = false;
+    let timerInterval = null;
+    let seconds = 0;
+
+    const startBtn = document.getElementById('start-btn');
+    const endBtn = document.getElementById('end-btn');
+    const statusPill = document.getElementById('status-pill');
+    const statusText = document.getElementById('status-text');
+    const avatar = document.getElementById('avatar');
+    const volBars = document.getElementById('vol-bars');
+    const transcript = document.getElementById('transcript');
+    const timerEl = document.getElementById('timer');
+    const errorMsg = document.getElementById('error-msg');
+
+    function setStatus(state, text) {
+      statusPill.className = `status-pill ${state}`;
+      statusText.textContent = text;
+      const dot = statusPill.querySelector('.dot');
+      dot.className = `dot${state === 'active' ? ' pulse' : ''}`;
+    }
+
+    function appendTranscript(role, text) {
+      const line = document.createElement('div');
+      line.className = `line ${role}`;
+      line.textContent = `${role === 'agent' ? '🎙 Journalist' : '👤 You'}: ${text}`;
+      transcript.appendChild(line);
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    function startTimer() {
+      seconds = 0;
+      timerInterval = setInterval(() => {
+        seconds++;
+        const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const s = String(seconds % 60).padStart(2, '0');
+        timerEl.textContent = `Call duration: ${m}:${s}`;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+    }
+
+    function setBars(active) {
+      volBars.className = `vol-bars${active ? ' visible' : ''}`;
+      volBars.querySelectorAll('.bar').forEach(b => {
+        b.className = `bar${active ? ' animate' : ''}`;
+      });
+    }
+
+    startBtn.addEventListener('click', async () => {
+      if (!sessionId) return;
+      startBtn.disabled = true;
+      startBtn.innerHTML = '<span class="spinner"></span> Connecting...';
+      setStatus('connecting', 'Connecting...');
+      errorMsg.style.display = 'none';
+
+      try {
+        // Fetch vapi_assistant_id from server (matches StartInterviewResponse)
+        const res = await fetch('/start-interview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Failed to create assistant');
+        }
+        const startData = await res.json();
+        const vapiAssistantId = startData.vapi_assistant_id;
+
+        // Initialize Vapi using html-script-tag SDK
+        const vapiKey = document.querySelector('meta[name="vapi-public-key"]')?.content
+          || window.VAPI_PUBLIC_KEY
+          || '';
+
+        if (!window.vapiSDK) throw new Error('Vapi SDK not loaded — check network connection');
+
+        // vapiSDK.run() initializes the SDK and returns a vapi instance
+        // We hide the default floating button and use our own UI
+        vapi = vapiSDK.run({
+          apiKey: vapiKey,
+          assistant: vapiAssistantId,
+          config: {
+            position: 'bottom-right',
+            offset: '400px', // move off-screen so it's hidden
+          },
+        });
+
+        // Hide the default floating button Vapi injects
+        setTimeout(() => {
+          document.querySelectorAll('[class*="vapi"], [id*="vapi"]').forEach(el => {
+            if (el.tagName !== 'SCRIPT') el.style.display = 'none';
+          });
+        }, 500);
+
+        // Start the call explicitly
+        await vapi.start(vapiAssistantId);
+
+        vapi.on('call-start', () => {
+          callActive = true;
+          setStatus('active', 'Live');
+          avatar.className = 'avatar';
+          startBtn.style.display = 'none';
+          endBtn.style.display = 'inline-block';
+          startTimer();
+          transcript.innerHTML = '';
+        });
+
+        vapi.on('call-end', () => {
+          callActive = false;
+          setStatus('ended', 'Call ended');
+          setBars(false);
+          stopTimer();
+          endBtn.style.display = 'none';
+          setTimeout(showPostCall, 1500);
+        });
+
+        vapi.on('speech-start', () => {
+          avatar.className = 'avatar speaking';
+          setBars(true);
+        });
+
+        vapi.on('speech-end', () => {
+          avatar.className = 'avatar';
+          setBars(false);
+        });
+
+        vapi.on('message', (msg) => {
+          if (msg.type === 'transcript') {
+            if (msg.transcriptType === 'final') {
+              appendTranscript(msg.role === 'assistant' ? 'agent' : 'user', msg.transcript);
+            }
+          }
+        });
+
+        vapi.on('error', (err) => {
+          console.error('Vapi error:', err);
+          errorMsg.textContent = `Call error: ${err.message || JSON.stringify(err)}`;
+          errorMsg.style.display = 'block';
+          setStatus('idle', 'Error');
+          startBtn.disabled = false;
+          startBtn.textContent = 'Retry';
+        });
+
+      } catch (err) {
+        errorMsg.textContent = `Error: ${err.message}`;
+        errorMsg.style.display = 'block';
+        setStatus('idle', 'Ready to connect');
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start Interview';
+      }
+    });
+
+    endBtn.addEventListener('click', () => {
+      if (vapi && callActive) {
+        vapi.stop();
+      }
+    });
+
+    function showPostCall() {
+      document.getElementById('call-card').style.display = 'none';
+      const postCard = document.getElementById('post-call-card');
+      postCard.style.display = 'block';
+      document.getElementById('results-link').href = `/static/results.html?session_id=${sessionId}`;
+      // Poll until results are ready
+      pollResults();
+    }
+
+    async function pollResults() {
+      const link = document.getElementById('results-link');
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        try {
+          const res = await fetch(`/results/${sessionId}`);
+          const data = await res.json();
+          if (data.status === 'ready' || data.output) {
+            link.textContent = 'View Results →';
+            return;
+          }
+        } catch (_) {}
+      }
+      link.textContent = 'View Results (may still be processing) →';
+    }
+  </script>
+
+  <!-- Set your Vapi public key here or via window.VAPI_PUBLIC_KEY before load -->
+  <script>
+    window.VAPI_PUBLIC_KEY = '00ee71a4-9ced-473e-b4c7-74433a3677e8';
+  </script>
+</body>
+</html>
