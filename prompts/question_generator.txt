@@ -36,6 +36,25 @@ Question rules:
 - Reference what you already know from context to show preparation
 - End each question with a follow-up hook
 
+QUESTION TYPES YOU MUST ALWAYS INCLUDE:
+
+1. The Hypothetical: "If [famous philanthropist/investor] walked
+   in tomorrow with unlimited resources, what would you do first
+   that you can't do today?"
+   This unlocks vision and ambition.
+
+2. The Media Frame: "What's the one story about [problem] that
+   would make a journalist/TV host stop scrolling?"
+   This forces the founder to distill to their most shocking fact.
+
+3. The Human Story: "What's the smallest/cheapest intervention
+   you made that had the biggest impact on one person's life?
+   Give me the specific story."
+   This produces the most quotable, shareable content.
+
+These three question types must appear in every interview
+regardless of which signals are strongest.
+
 Respond ONLY with valid JSON. No markdown, no code fences.
 Output schema:
 {

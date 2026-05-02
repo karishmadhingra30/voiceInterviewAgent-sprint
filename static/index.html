@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PressClub — Research</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+    label { display: block; margin-top: 1rem; font-weight: 600; }
+    input[type="text"] { width: 100%; padding: 0.5rem; box-sizing: border-box; }
+    button { margin-top: 1rem; padding: 0.5rem 1rem; cursor: pointer; }
+    #out { margin-top: 1rem; white-space: pre-wrap; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Research</h1>
+  <p>Enter a local folder path containing your transcript bundle (e.g. tests/fixtures/LastMile).</p>
+  <form id="research-form">
+    <label for="folder_path">Folder path</label>
+    <input
+      type="text"
+      id="folder_path"
+      name="folder_path"
+      placeholder="/absolute/or/relative/path/to/folder"
+      required
+      autocomplete="off"
+    />
+    <button type="submit">Start research</button>
+  </form>
+  <div id="out"></div>
+  <script>
+    document.getElementById('research-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const folder_path = document.getElementById('folder_path').value.trim();
+      const out = document.getElementById('out');
+      out.textContent = 'Submitting…';
+      try {
+        const res = await fetch('/research', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder_path }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const msg = typeof data.detail === 'string'
+            ? data.detail
+            : JSON.stringify(data.detail ?? data);
+          throw new Error(msg);
+        }
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        out.textContent = 'Error: ' + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
