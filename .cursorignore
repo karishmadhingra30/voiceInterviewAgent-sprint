@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+data/outputs/
+*.mp3
+*.wav
+.env

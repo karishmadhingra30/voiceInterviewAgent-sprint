@@ -1,0 +1,172 @@
+# PressClub AI Voice Interviewer — Cursor Rules
+
+## Project Context
+This is a 24-hour sprint build for PressClub, a PR automation startup.
+We are building an AI voice interviewer that replaces a human PR interviewer.
+The system researches startup founders, conducts a voice interview via Vapi,
+and outputs structured notes for a pitch generation pipeline.
+Input: .txt sales transcripts + context files (no audio).
+Output: .txt / .md scorecard and interview notes for Weida's pipeline.
+
+## Stack
+- Python 3.13 (Anaconda + venv at project root)
+- FastAPI for the backend (fully async)
+- Vapi for voice orchestration (NOT raw WebRTC, NOT native voice-to-voice)
+- Claude via AsyncAnthropic() for research and synthesis agents
+- Gemini as the LLM inside Vapi (configured via Vapi API, not called directly)
+- Oxylabs for LinkedIn scraping (via httpx.AsyncClient)
+- Plain HTML/JS for frontend (NO React, NO Next.js, NO frameworks)
+
+## MVP Scope
+- MVP uses Vapi with its built-in Gemini LLM — no Custom LLM URL
+- Stretch 1: Custom LLM URL pointing to FastAPI /chat/completions endpoint
+- Stretch 2: stopSpeakingPlan + assistant hooks for interruption handling
+- Do NOT implement stretch goals unless explicitly asked
+
+## File Structure
+Follow this exactly — do not create files outside this structure:
+  main.py                       # FastAPI app: routes, CORS, webhook receiver
+  agents/research_agent.py      # Phase 1: orchestrates all research → BriefingDoc
+  agents/synthesis_agent.py     # Phase 3: transcript → scorecard + output.md
+  services/input_parser.py      # Reads/cleans .txt transcripts and .pdf files
+  services/crawler_service.py   # Oxylabs LinkedIn API wrapper (async)
+  services/website_reader.py    # Company URL → structured content via Claude
+  services/vapi_service.py      # Vapi assistant config and API calls only
+  services/storage.py           # Save outputs to data/outputs/
+  prompts/research.txt          # Signal detection prompt
+  prompts/interviewer.txt       # Journalist persona prompt
+  prompts/synthesizer.txt       # Post-call synthesis prompt
+  static/index.html             # Upload form: transcript + context + URLs
+  static/interview.html         # Active call page (Vapi Web SDK)
+  static/results.html           # Scorecard + transcript + download button
+  tests/benchmark.py            # All validation and benchmark execution
+  requirements.txt              # All pip dependencies
+
+## Input Format
+- 1st Meeting.txt: raw sales call transcript with Me: / Them: speaker labels
+- Context.txt: founder name, LinkedIn URL, company URL, brief description
+- Optional PDFs: press releases, decks, additional context
+- Clean transcripts by: removing filler lines, relabeling Me: → PRESSCLUB: and Them: → CUSTOMER:, stripping header metadata (Meeting Title, Date, etc.)
+- Ground truth for benchmarking: 2nd Meeting.txt (real human interview)
+
+## Newsworthy Angle Framework
+The research agent must evaluate all inputs against these 5 signal types:
+1. FUNDING:  $1M+ minimum for general tech, $10M+ for B2B SaaS (TechCrunch threshold)
+2. PRODUCT:  "World first" or "world best" positioning required.
+             Benchmark improvements with specific percentages.
+3. TRACTION: Format "Startup hits $X in Y timeframe" or high growth rate (100x).
+             Quality over quantity: 3 Fortune 500 clients beats many small ones.
+4. FOUNDER:  1-in-10,000 rarity in background or experience.
+5. INSIGHT:  Contrarian data point vs industry average
+             (e.g. industry 40% return rate vs client's 15%).
+The briefing doc must rank hypothesized angles by signal strength.
+Never fabricate signals — only extract what is explicitly stated or
+strongly implied in the source material.
+
+## Session Management
+- Generate a UUID session_id at the /research endpoint
+- Pass session_id through all phases: research → interview → synthesis
+- Prefix ALL saved artifacts with session_id:
+    {session_id}_briefing.json
+    {session_id}_transcript.txt
+    {session_id}_output.md
+- Pass session_id to the frontend in the /start-interview API response
+- Frontend embeds session_id at page load, passes it in the call-end redirect
+
+## Coding Rules
+- Always use python-dotenv and os.getenv() for API keys — never hardcode
+- All API keys come from .env file
+- Use Pydantic models for ALL structured data: LLM outputs, API responses,
+  Vapi webhook payloads, briefing docs, scorecards
+- PascalCase for all Pydantic model class names
+- Every function must have a docstring explaining what it does and its I/O
+- Every file must have a module-level docstring explaining its role
+- Use type hints on all function signatures
+- Handle errors explicitly — never use bare except: without logging first
+- Log progress with prefixes: [OK] [ERROR] [WARNING] [LLM-CALL] [VAPI]
+- Keep functions under 80 lines — split into helpers if longer
+- No external libraries unless already in requirements.txt
+- After any pip install, immediately add to requirements.txt with exact version:
+    pip show packagename → copy version → add to requirements.txt
+
+## Async Rules
+- ALL FastAPI route functions must be async def
+- Use AsyncAnthropic() not Anthropic() for all Claude API calls
+- Use httpx.AsyncClient() not requests for all raw HTTP calls including Oxylabs
+- Never make synchronous network calls inside FastAPI routes
+- For file I/O inside async routes: use asyncio.to_thread()
+- Group imports: stdlib → third party → local, separated by blank lines
+
+## LLM Rules
+- Enforce JSON output from Claude by ending every prompt with:
+  "Respond ONLY with valid JSON. No markdown, no explanation, no code fences."
+- Before parsing, extract JSON from LLM response using:
+    match = re.search(r'\{.*\}', response, re.DOTALL)
+  If no match found, treat as failure and trigger retry.
+- Validate extracted JSON directly into Pydantic models:
+    model = MyModel.model_validate_json(match.group())
+- Catch both ValidationError and JSONDecodeError — both trigger retry logic
+- Implement retry with exponential backoff for all LLM and network calls:
+    attempt 1 → fail → wait 2s → attempt 2 → fail → wait 4s → attempt 3
+- Maximum 3 attempts total. If all fail, raise RuntimeError with full context.
+- Log every LLM call with [LLM-CALL] prefix showing model and prompt length
+
+## Prompt Loading
+- Always load prompts from the prompts/ directory
+- Use this exact pattern in every file that needs a prompt:
+    from pathlib import Path
+    PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+    prompt = (PROMPTS_DIR / "research.txt").read_text()
+- Never hardcode prompt strings inside Python files
+
+## FastAPI Setup (main.py)
+- Configure CORSMiddleware with allow_origins=["*"] for sprint
+- Mount static files: app.mount("/static", StaticFiles(directory="static"))
+- All routes return consistent JSON:
+    {"status": "ok/error", "data": ..., "session_id": "..."}
+
+## Vapi & Frontend Lifecycle
+- Webhook route must filter by event type before acting:
+    payload = await request.json()
+    if payload.get("message", {}).get("type") != "end-of-call-report":
+        return {"status": "ignored"}
+- Extract transcript using the plain text field:
+    transcript = payload["message"]["artifact"]["transcript"]
+  Fall back to joining artifact.messages if transcript field is absent.
+- Only trigger synthesis_agent after confirming transcript is non-empty.
+- Frontend interview.html must listen for call end and redirect:
+    vapi.on('call-end', () => {
+        window.location.href = `/static/results.html?session_id=${sessionId}`
+    })
+- session_id must be embedded in interview.html at page load time,
+  passed from the /start-interview API response.
+
+## Storage Rules
+- All output files saved to: data/outputs/{session_id}_filename.ext
+- Always create directory if missing:
+    Path("data/outputs").mkdir(parents=True, exist_ok=True)
+- Never save files outside the data/outputs/ directory
+
+## Environment Variables
+ANTHROPIC_API_KEY     # AsyncAnthropic client
+VAPI_API_KEY          # Vapi REST API calls
+GEMINI_API_KEY        # Passed to Vapi assistant config (not called directly)
+OXYLABS_USERNAME      # LinkedIn scraper auth
+OXYLABS_PASSWORD      # LinkedIn scraper auth
+
+## Style
+- snake_case for all variables and functions
+- PascalCase for Pydantic models only
+- Descriptive names — no single letter variables except loop counters
+- Comments explain WHY not WHAT
+
+## What NOT To Do
+- Do NOT use React, Next.js, or any JS framework — vanilla HTML/JS only
+- Do NOT use synchronous Anthropic() client inside FastAPI routes
+- Do NOT use requests library — use httpx.AsyncClient instead
+- Do NOT hardcode prompt strings in Python files
+- Do NOT use global variables for state — pass session_id explicitly
+- Do NOT generate placeholder or todo functions — write real implementations
+- Do NOT install packages without adding exact version to requirements.txt
+- Do NOT catch bare Exception without logging the error and context first
+- Do NOT implement stretch goals (Custom LLM URL, stopSpeakingPlan) unless asked
