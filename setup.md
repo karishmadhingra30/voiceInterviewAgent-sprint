@@ -69,7 +69,58 @@ BRIGHTDATA_DATASET_ID=your_brightdata_dataset_id_here
 
 ---
 
-## Step 5 — Run the server
+## Step 5 — Install and set up ngrok
+
+Vapi needs to send webhook events (the interview transcript) to your local server after each call ends. For this to work, your server must be publicly reachable — ngrok creates a secure tunnel from a public URL to your localhost.
+
+**Install ngrok:**
+
+```bash
+# Mac (Homebrew)
+brew install ngrok
+
+# Or download directly from https://ngrok.com/download
+```
+
+**Create a free ngrok account** at ngrok.com, then connect your auth token:
+
+```bash
+ngrok config add-authtoken your_ngrok_token_here
+```
+
+Your auth token is on your ngrok dashboard under **Your Authtoken**.
+
+---
+
+## Step 6 — Configure the Vapi webhook URL
+
+1. Start ngrok in a terminal (keep this running):
+
+```bash
+ngrok http 8000
+```
+
+You'll see output like:
+
+```
+Forwarding   https://abc123.ngrok-free.app -> http://localhost:8000
+```
+
+2. Copy the `https://...ngrok-free.app` URL.
+
+3. Go to your Vapi assistant in the dashboard → **Server URL** (or Webhook settings) → set it to:
+
+```
+https://abc123.ngrok-free.app/vapi-webhook
+```
+
+4. Save the assistant. **Do this every time you restart ngrok** — the URL changes each session unless you have a paid ngrok plan with a fixed domain.
+
+---
+
+## Step 7 — Run the server
+
+Open a second terminal (keep ngrok running in the first) and start the FastAPI server:
 
 ```bash
 python main.py
@@ -86,7 +137,7 @@ Open your browser and go to `http://localhost:8000`.
 
 ---
 
-## Step 6 — Run a full interview
+## Step 8 — Run a full interview
 
 1. **Upload page** (`/`) — paste a sales call transcript and optional company context (background text with a website URL and/or LinkedIn URL)
 2. Click **Start Research** — the system reads the website, scrapes LinkedIn, and generates 12 interview questions (takes ~20-40 seconds)
@@ -94,18 +145,6 @@ Open your browser and go to `http://localhost:8000`.
 4. Talk to Riley (the AI journalist) — she will work through the question bank and probe for specific numbers
 5. End the call — the system automatically transcribes the interview and produces a newsworthy scorecard
 6. **Results page** — view the scorecard, structured notes, and recommended pitch angle, then download the output
-
----
-
-## Optional: Run the prompt optimizer
-
-The optimizer improves question quality by running a generate → evaluate → rewrite loop against the training data. Run it once before using the system on new companies:
-
-```bash
-python -m agents.prompt_optimizer
-```
-
-This saves the best prompt to `tests/optimization_results/best_prompt.txt` and automatically deploys it to `prompts/question_generator.txt`.
 
 ---
 
@@ -125,7 +164,7 @@ python -m tests.benchmark
 
 **Research takes a long time** — The first run triggers DSPy optimization on the training data, which takes 2-5 minutes. Subsequent runs load the saved optimized agent from `tests/optimization_results/optimized_agent.json` and are much faster (~20 seconds).
 
-**Vapi webhook not firing** — The server must be publicly reachable for Vapi to POST to `/vapi-webhook`. Use ngrok or similar for local testing: `ngrok http 8000`. Set the webhook URL in your Vapi assistant settings to `https://your-ngrok-url/vapi-webhook`.
+**Vapi webhook not firing** — Make sure ngrok is running and the webhook URL in your Vapi assistant settings matches the current ngrok URL (see Step 6). The URL changes every time you restart ngrok unless you have a paid plan with a fixed domain.
 
 **`VAPI_ASSISTANT_ID` not set** — You must create an assistant manually in the Vapi dashboard at least once. The system PATCHes this assistant with each session's content rather than creating a new one each time.
 
