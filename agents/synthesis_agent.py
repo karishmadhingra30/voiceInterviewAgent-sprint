@@ -33,7 +33,7 @@ SIGNAL_TYPES = [
 ]
 
 
-async def run_synthesis_agent(transcript: str, briefing_doc: dict) -> str:
+async def run_synthesis_agent(transcript: str, briefing_doc: dict, session_id: str = "unknown") -> str:
     """
     Synthesize interview transcript + briefing doc into output.md string.
     """
@@ -94,7 +94,7 @@ IMPORTANT: Do not fabricate facts not present in the transcript. Mark anything u
 
         logger.info("[OK] Claude response received, saving output")
 
-        output_path = Path("data/outputs") / f"{briefing_doc.get('session_id', 'unknown')}_output.md"
+        output_path = Path("data/outputs") / f"{session_id}_output.md"
         await asyncio.to_thread(output_path.parent.mkdir, parents=True, exist_ok=True)
         await asyncio.to_thread(output_path.write_text, output, encoding="utf-8")
         logger.info("[OK] Synthesis saved to %s", output_path)

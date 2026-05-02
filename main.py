@@ -401,7 +401,7 @@ async def vapi_webhook(request: Request):
                 briefing_doc = json.loads(await async_read(briefing_path))
 
             logger.info("[OK] Starting synthesis for session %s", session_id)
-            await run_synthesis_agent(transcript, briefing_doc)
+            await run_synthesis_agent(transcript, briefing_doc, session_id)
             logger.info("[OK] Synthesis complete for session %s", session_id)
 
         except Exception as exc:
