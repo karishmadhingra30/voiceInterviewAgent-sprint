@@ -158,7 +158,7 @@
       btn.disabled = true;
       btn.textContent = 'Running Research Agent...';
       statusBox.className = 'status loading';
-      statusBox.innerHTML = '<span class="spinner"></span> Analyzing website, LinkedIn, and transcript. This takes ~30–60 seconds...';
+      statusBox.innerHTML = '<span class="spinner"></span> Analyzing website, LinkedIn, and transcript. This may take 1-2 minutes...';
 
       const hasFile = fileInput.files.length > 0;
       const hasPaste = form.transcript_text?.value?.trim().length > 0;

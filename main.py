@@ -373,13 +373,23 @@ async def vapi_webhook(request: Request):
         return {"status": "no_transcript"}
 
     call = message.get("call", {})
-    session_id = call.get("metadata", {}).get("session_id", "unknown")
+    assistant_obj = message.get("assistant", {})
+
+    session_id = call.get("metadata", {}).get("session_id", "")
+
+    # Fallback: extract from assistant name "PressClub-{session_id}"
+    if not session_id:
+        assistant_name = assistant_obj.get("name", "") if assistant_obj else ""
+        if assistant_name.startswith("PressClub-"):
+            session_id = assistant_name[len("PressClub-"):]
+            logger.info("[VAPI] session_id recovered from assistant name: %s", session_id)
+
+    # Fallback: check assistant metadata
+    if not session_id:
+        session_id = (assistant_obj.get("metadata", {}) or {}).get("session_id", "unknown") if assistant_obj else "unknown"
 
     if session_id == "unknown":
-        logger.warning(
-            "[WARNING] session_id not found in call metadata — "
-            "check vapi_service attaches metadata on assistant creation",
-        )
+        logger.warning("[WARNING] session_id not found in webhook payload")
 
     logger.info(
         "[VAPI] Call ended session=%s transcript_len=%d",
