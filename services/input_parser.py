@@ -296,7 +296,36 @@ def load_ground_truth(folder_path: str) -> str:
         logger.error("[ERROR] Failed to read ground truth %s: %s", path, exc)
         return ""
 
-
+def extract_urls(text: str) -> dict:
+    """
+    Extract LinkedIn and website URLs from context text.
+    
+    Scans raw context string for all http/https URLs.
+    Splits them into LinkedIn profile URLs and general website URLs.
+    
+    Returns:
+        {
+            "linkedin_urls": [...],   # URLs containing linkedin.com/in/
+            "website_urls": [...]     # all other http/https URLs
+        }
+    """
+    all_urls = re.findall(r'https?://[^\s\)\"\']+', text)
+    
+    linkedin_urls = []
+    website_urls = []
+    
+    for url in all_urls:
+        # Strip trailing punctuation that got caught in regex
+        url = url.rstrip('.,;:)')
+        if 'linkedin.com/in/' in url:
+            linkedin_urls.append(url)
+        else:
+            website_urls.append(url)
+    
+    return {
+        "linkedin_urls": linkedin_urls,
+        "website_urls": website_urls
+    }
 
 
 
@@ -317,3 +346,8 @@ if __name__ == "__main__":
     
     gt = load_ground_truth(folder)
     print(f"[OK] ground truth: {len(gt)} chars")
+
+    # Test URL extraction
+    urls = extract_urls(result.context)
+    print(f"[OK] LinkedIn URLs:{urls['linkedin_urls']}")
+    print(f"[OK] Website URLs: {urls['website_urls']}")
