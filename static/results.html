@@ -91,7 +91,6 @@
     <div id="loading-state" class="loading-state">
       <div class="spinner"></div>
       <p>Synthesis agent is processing your interview...</p>
-      <p style="font-size:0.8rem;color:#444;margin-top:8px">This usually takes 20–30 seconds after the call ends.</p>
     </div>
 
     <div id="results-content" style="display:none">
@@ -262,7 +261,7 @@
       }
 
       document.getElementById('loading-state').innerHTML =
-        '<p style="color:#ff8888">Synthesis is taking longer than expected. <a href="#" onclick="location.reload()" style="color:#88aaff">Refresh</a> to check again.</p>';
+        '<p style="color:#ff8888">Results are still processing. Click <a href="#" onclick="location.reload()" style="color:#88aaff">Refresh</a> to check again.</p>';
     }
 
     document.getElementById('download-btn').addEventListener('click', () => {

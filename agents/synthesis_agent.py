@@ -9,11 +9,12 @@ import asyncio
 import json
 import logging
 import os
+import traceback
 from pathlib import Path
 
 from anthropic import AsyncAnthropic
-
 from dotenv import load_dotenv
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -36,15 +37,17 @@ async def run_synthesis_agent(transcript: str, briefing_doc: dict) -> str:
     """
     Synthesize interview transcript + briefing doc into output.md string.
     """
-    client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    system = _load_prompt()
+    logger.info("[OK] Synthesis agent starting")
+    try:
+        client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        system = _load_prompt()
 
-    company = briefing_doc.get("company_name", "the company")
-    founder = briefing_doc.get("founder_name", "the founder")
-    angles = briefing_doc.get("hypothesized_angles", [])
-    known_facts = briefing_doc.get("known_facts", [])
+        company = briefing_doc.get("company_name", "the company")
+        founder = briefing_doc.get("founder_name", "the founder")
+        angles = briefing_doc.get("hypothesized_angles", [])
+        known_facts = briefing_doc.get("known_facts", [])
 
-    prompt = f"""You are synthesizing the results of an AI-conducted interview for PressClub.
+        prompt = f"""You are synthesizing the results of an AI-conducted interview for PressClub.
 
 COMPANY: {company}
 FOUNDER: {founder}
@@ -80,21 +83,29 @@ The full interview transcript as provided.
 
 IMPORTANT: Do not fabricate facts not present in the transcript. Mark anything uncertain as `needs follow-up`."""
 
-    response = await client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=4096,
-        system=system,
-        messages=[{"role": "user", "content": prompt}],
-    )
+        response = await client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=4096,
+            system=system,
+            messages=[{"role": "user", "content": prompt}],
+        )
 
-    output = response.content[0].text
+        output = response.content[0].text
 
-    output_path = Path("data/outputs") / f"{briefing_doc.get('session_id', 'unknown')}_output.md"
-    await asyncio.to_thread(output_path.parent.mkdir, parents=True, exist_ok=True)
-    await asyncio.to_thread(output_path.write_text, output, encoding="utf-8")
-    logger.info("[OK] Synthesis saved to %s", output_path)
-    
-    return output
+        logger.info("[OK] Claude response received, saving output")
+
+        output_path = Path("data/outputs") / f"{briefing_doc.get('session_id', 'unknown')}_output.md"
+        await asyncio.to_thread(output_path.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(output_path.write_text, output, encoding="utf-8")
+        logger.info("[OK] Synthesis saved to %s", output_path)
+
+        return output
+    except Exception:
+        logger.error(
+            "[ERROR] Synthesis agent failed\n%s",
+            traceback.format_exc(),
+        )
+        raise
 
 
 

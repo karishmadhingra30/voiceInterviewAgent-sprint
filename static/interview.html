@@ -99,6 +99,13 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .error-msg { color: #ff8888; font-size: 0.85rem; margin-top: 12px; display: none; }
+    .research-prep { margin-bottom: 20px; font-size: 0.9rem; color: #888; line-height: 1.55; text-align: center; }
+    .research-prep .research-loading-inner { display: inline-flex; align-items: flex-start; gap: 10px; text-align: left; justify-content: center; }
+    .research-prep .research-ready { color: #666; margin: 0; }
+    .research-prep .research-error-wrap { text-align: center; }
+    .research-prep .research-error-wrap .error-msg { margin-top: 0; margin-bottom: 10px; }
+    .research-prep a { color: #88aaff; font-weight: 500; text-decoration: none; }
+    .research-prep a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -127,8 +134,22 @@
       <div class="line" style="color:#555">Transcript will appear here during the call...</div>
     </div>
 
+    <div class="research-prep" id="research-prep" style="display: none;">
+      <div id="research-loading-block">
+        <div class="research-loading-inner">
+          <span class="spinner" style="flex-shrink: 0; margin-top: 3px;"></span>
+          <span>Preparing your interview...<br />Researching company background.</span>
+        </div>
+      </div>
+      <p class="research-ready" id="research-ready-block" style="display: none;">Research complete — ready to start interview</p>
+      <div class="research-error-wrap" id="research-error-block" style="display: none;">
+        <p class="error-msg" id="research-error-text" style="display: none; margin-top: 0;"></p>
+        <a href="/static/index.html">Back to home</a>
+      </div>
+    </div>
+
     <div class="controls">
-      <button id="start-btn">Start Interview</button>
+      <button id="start-btn" disabled>Start Interview</button>
       <button id="end-btn">End Call</button>
     </div>
 
@@ -139,7 +160,7 @@
   <div class="card post-call" id="post-call-card">
     <div style="font-size:2rem;margin-bottom:16px">✅</div>
     <h2 style="margin-bottom:8px">Interview Complete</h2>
-    <p>The synthesis agent is analyzing your transcript. Results will be ready in about 30 seconds.</p>
+    <p>The synthesis agent is analyzing your transcript. Results will be ready soon.</p>
     <a id="results-link" href="#">View Results →</a>
   </div>
 
@@ -147,10 +168,76 @@
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get('session_id');
 
+    const researchPrep = document.getElementById('research-prep');
+    const researchLoadingBlock = document.getElementById('research-loading-block');
+    const researchReadyBlock = document.getElementById('research-ready-block');
+    const researchErrorBlock = document.getElementById('research-error-block');
+    const researchErrorText = document.getElementById('research-error-text');
+    const startBtn = document.getElementById('start-btn');
+
+    let researchPollInterval = null;
+
+    function stopResearchPoll() {
+      if (researchPollInterval !== null) {
+        clearInterval(researchPollInterval);
+        researchPollInterval = null;
+      }
+    }
+
+    function showResearchError(message) {
+      stopResearchPoll();
+      researchLoadingBlock.style.display = 'none';
+      researchReadyBlock.style.display = 'none';
+      researchErrorBlock.style.display = 'block';
+      researchErrorText.textContent = message;
+      researchErrorText.style.display = 'block';
+      startBtn.disabled = true;
+    }
+
+    async function pollResearchStatus() {
+      const check = async () => {
+        try {
+          const res = await fetch(`/research/status/${encodeURIComponent(sessionId)}`);
+          if (res.status === 404) {
+            showResearchError('Session not found. Go back and run research first.');
+            return;
+          }
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.status === 'ready') {
+            stopResearchPoll();
+            researchLoadingBlock.style.display = 'none';
+            researchReadyBlock.style.display = 'block';
+            startBtn.disabled = false;
+            return;
+          }
+          if (data.status === 'error') {
+            const detail = (data.errors && data.errors.length)
+              ? data.errors.join(' ')
+              : 'Research failed.';
+            showResearchError(detail);
+            return;
+          }
+        } catch (_) {
+          /* retry on next interval */
+        }
+      };
+      await check();
+      researchPollInterval = setInterval(check, 5000);
+    }
+
     if (!sessionId) {
       document.getElementById('session-label').textContent = 'No session ID — go back and run research first.';
+      researchPrep.style.display = 'none';
     } else {
       document.getElementById('session-label').textContent = `Session: ${sessionId.slice(0, 8)}...`;
+      researchPrep.style.display = 'block';
+      researchLoadingBlock.style.display = 'block';
+      researchReadyBlock.style.display = 'none';
+      researchErrorBlock.style.display = 'none';
+      researchErrorText.style.display = 'none';
+      startBtn.disabled = true;
+      pollResearchStatus();
     }
 
     let vapi = null;
@@ -158,7 +245,6 @@
     let timerInterval = null;
     let seconds = 0;
 
-    const startBtn = document.getElementById('start-btn');
     const endBtn = document.getElementById('end-btn');
     const statusPill = document.getElementById('status-pill');
     const statusText = document.getElementById('status-text');

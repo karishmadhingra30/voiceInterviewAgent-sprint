@@ -109,8 +109,8 @@
 
     <form id="research-form">
       <div class="field">
-        <label>Company Website URL *</label>
-        <input type="url" name="company_url" placeholder="https://acme.com" required />
+        <label>Company Website URL <span style="color:#555;font-weight:400">(optional if pasting context below)</span></label>
+        <input type="url" name="company_url" placeholder="https://acme.com" />
       </div>
 
       <div class="field">
@@ -126,11 +126,12 @@
           <div class="filename" id="filename-display"></div>
         </div>
         <div class="divider">or paste below</div>
-        <textarea name="transcript_paste" id="transcript-paste" rows="6" placeholder="Paste transcript text here if you are not using a file..."></textarea>
+        <textarea name="transcript_text" id="transcript-text" rows="6" placeholder="Paste transcript text here if you are not using a file..."></textarea>
       </div>
 
       <div class="field">
         <label>Context / Background</label>
+        <span style="display:block;color:#555;font-size:0.8rem;margin:-2px 0 8px 0;line-height:1.35">Paste context info OR provide URLs above — at least one is recommended</span>
         <textarea name="context_text" rows="4" placeholder="Paste context info here — founder name, LinkedIn URL, company description..."></textarea>
       </div>
 
@@ -159,19 +160,23 @@
       statusBox.className = 'status loading';
       statusBox.innerHTML = '<span class="spinner"></span> Analyzing website, LinkedIn, and transcript. This takes ~30–60 seconds...';
 
+      const hasFile = fileInput.files.length > 0;
+      const hasPaste = form.transcript_text?.value?.trim().length > 0;
+      if (!hasFile && !hasPaste) {
+        statusBox.className = 'status error';
+        statusBox.textContent = 'Please upload or paste a sales transcript.';
+        btn.disabled = false;
+        btn.textContent = 'Run Research Agent →';
+        return;
+      }
+
       const transcriptFile = fileInput.files[0];
-      const pasteEl = document.getElementById('transcript-paste');
+      const pasteEl = form.transcript_text;
       let transcriptText = '';
       if (transcriptFile) {
         transcriptText = await transcriptFile.text();
       } else if (pasteEl?.value?.trim()) {
         transcriptText = pasteEl.value.trim();
-      } else {
-        statusBox.className = 'status error';
-        statusBox.textContent = 'Please upload a .txt transcript or paste the transcript.';
-        btn.disabled = false;
-        btn.textContent = 'Run Research Agent →';
-        return;
       }
 
       const payload = {

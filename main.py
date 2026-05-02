@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import traceback
 import uuid
 from pathlib import Path
 
@@ -394,18 +395,21 @@ async def vapi_webhook(request: Request):
         try:
             from agents.synthesis_agent import run_synthesis_agent
 
-            # Load briefing doc for this session
             briefing_path = OUTPUTS_DIR / f"{session_id}_briefing.json"
             briefing_doc = {}
             if await async_exists(briefing_path):
                 briefing_doc = json.loads(await async_read(briefing_path))
 
+            logger.info("[OK] Starting synthesis for session %s", session_id)
             await run_synthesis_agent(transcript, briefing_doc)
+            logger.info("[OK] Synthesis complete for session %s", session_id)
+
         except Exception as exc:
             logger.error(
-                "[ERROR] Synthesis failed session=%s: %s",
+                "[ERROR] Synthesis failed session=%s error=%s\n%s",
                 session_id,
                 exc,
+                traceback.format_exc(),
             )
 
     asyncio.create_task(run_synthesis_with_logging())
