@@ -1,0 +1,51 @@
+{
+  "iteration": 0,
+  "score": 0.73,
+  "passed": false,
+  "questions": [
+    "You've raised $50 million since 2019\u2014that's $100,000 to $3 million to $50 million in six years. Walk me through the exact funding milestones: how much in each round, which investors or major donors came in at each stage, and what's your current runway with the $6 million annual deployment rate?",
+    "You mentioned your first sponsor was Melinda Gates. Can you tell me the exact story of how that happened\u2014how you got in the room, what you pitched, and what size check she wrote that opened all the other doors?",
+    "You said you process $500,000 per month in awards with just 2.5 people. That's $6 million annually on essentially three headcount. How does that compare to other nonprofits in your space\u2014what's the typical overhead ratio for scholarship organizations versus your 15-20%?",
+    "You're achieving an 80% graduation rate with low-income STEM students. The national rate for all students is 65%, and for low-income students it's 41%. That's a 60% improvement over the baseline. What's the single biggest factor that explains that massive delta\u2014is it the speed of funding, the no-strings-attached model, or something else?",
+    "You worked in the Obama White House as Senior Policy Advisor for Tech Inclusion. Can you share the most shocking statistic or insight you discovered in that role that directly led you to create Last Mile\u2014something that contradicted what the policy community believed about STEM dropout rates?",
+    "You said the US is losing 13,800 engineering students annually in their junior and senior years\u2014students who've already had $634,000 of societal investment. Where does that number come from, and what's the total economic loss when you multiply it out over a decade?",
+    "You mentioned you could increase the national yield of engineers by 4-5% with $30 million per year. Walk me through that math: how many students would that fund, how does that compare to the current annual output of engineering graduates, and why isn't the federal government already doing this?",
+    "You have a multimillion-dollar semiconductor fund backed by five semiconductor companies that creates a direct hiring pipeline. Which companies are in that consortium, how much have they committed, and what's their return on investment when they hire your graduates versus traditional recruiting?",
+    "You said most of the trillions in student loan debt is held by people who didn't graduate. That's counterintuitive\u2014everyone assumes graduates carry the debt. What's the exact percentage breakdown, and why does that reality make your intervention even more critical?",
+    "You deployed your first award from a $750,000 family gift within 48 hours of receiving the money. Traditional scholarship funds take 3-6 months. What did you have to build on the backend to make that speed possible, and what does that tell us about what's broken in the traditional scholarship infrastructure?",
+    "You mentioned 67% of your students are Black and Latino, 50% are women, and you're achieving better outcomes than the national average for all students. What does that data tell us about who's actually capable of succeeding in STEM versus who our current systems are designed to support?",
+    "You said you want to be the 'go-to expert' quoted on workforce development and college completion, but traditional scholarship organizations get that attention. What's your most contrarian take on why the $8 billion annual scholarship industry is fundamentally broken\u2014something that would make a funder or policymaker completely rethink their approach?"
+  ],
+  "signal_targets": [
+    "funding",
+    "founder",
+    "traction",
+    "product",
+    "founder",
+    "insight",
+    "product",
+    "traction",
+    "insight",
+    "product",
+    "traction",
+    "insight"
+  ],
+  "weaknesses": [
+    "Missing the human's iterative refinement approach ('make it more specific', 'one sentence as striking as possible')",
+    "Doesn't explicitly demand 'heart-pulling' individual student stories with names and details",
+    "Lacks questions about specific crisis examples (tuition bureaucracy failures, life disruptions)",
+    "Doesn't probe the 'scarcity vs. abundance model' systemic critique from transcript",
+    "Less emphasis on maximum impact framing ('what's the biggest GDP number we can calculate')",
+    "Q12 is notably more open-ended than other questions, breaking the pattern of specificity",
+    "Some redundancy between questions covering similar operational/efficiency themes"
+  ],
+  "strengths": [
+    "Excellent specificity with concrete numbers, percentages, and dollar amounts throughout",
+    "Strong multi-part structure that demands comprehensive answers (Q1, Q4, Q7, Q8)",
+    "Good use of comparative framing (overhead ratios, graduation rates vs. national averages)",
+    "Questions reference specific claims from transcript and push for verification",
+    "Successfully probes multiple dimensions of same topic (funding history, operational efficiency, outcomes)",
+    "Q9 effectively highlights counterintuitive insight about student debt distribution"
+  ],
+  "prompt_used": "You are a senior tech journalist with 10 years covering B2B SaaS \nand deep tech startups. Your goal is to conduct a 30-minute \ninterview to extract newsworthy angles for a PR pitch campaign.\n\nYou must generate exactly 12 interview questions that cover \nALL 5 signal types. Every interview must probe all 5 \u2014 \nonly 2-3 will yield strong angles, but you don't know which \nones until you ask.\n\nSignal types to cover:\n1. FUNDING: Ask about total raised, round size, investors, runway\n   Threshold: $1M+ general tech, $10M+ B2B SaaS\n   Ask for: exact amounts, investor names, timing\n   \n2. PRODUCT: Ask about differentiation, benchmarks, world-firsts\n   Look for: \"first in the world\", \"10x better\", specific % improvements\n   Ask for: concrete comparisons vs competitors\n   \n3. TRACTION: Ask about revenue, users, growth rate, notable clients\n   Format: \"X hits $Y in Z timeframe\" or \"100x growth\"\n   Ask for: exact numbers, Fortune 500 client names\n   \n4. FOUNDER: Ask about unique background, rare experiences\n   Look for: 1-in-10,000 experiences (White House, famous investors,\n   unicorn exits, top research labs)\n   Ask for: the story behind the story\n   \n5. INSIGHT: Ask for contrarian takes on the industry\n   Look for: data that contradicts common wisdom\n   Ask for: specific statistics vs industry average\n\nQuestion rules:\n- Ask for ONE specific thing per question\n- Push for numbers not generalities\n- Ask for the most shocking or surprising version of the fact\n- Reference what you already know from context to show preparation\n- End each question with a follow-up hook\n\nRespond ONLY with valid JSON. No markdown, no code fences.\nOutput schema:\n{\n  \"questions\": [\"question 1\", \"question 2\", ...],\n  \"signal_targets\": [\"funding\", \"product\", ...]\n}\n"
+}
