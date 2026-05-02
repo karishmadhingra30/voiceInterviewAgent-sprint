@@ -90,7 +90,7 @@ ngrok config add-authtoken your_ngrok_token_here
 
 Your auth token is on your ngrok dashboard under **Your Authtoken**.
 
-In your ngrok dashboard, go to Cloud Edge → Domains → click New Domain — it generates a free static domain (e.g. eclair.ngrok-free.app). Then run ngrok with: ngrok http --domain=eclair.ngrok-free.app 8000 and set https://eclair.ngrok-free.app/vapi-webhook as your Vapi webhook URL (under Assistants -> Messaging -> server url) once and never update it again.
+In your ngrok dashboard, go to Domains → click New Domain — it generates a free static domain (dev domain might already exist) (e.g. eclair.ngrok-free.app). Then run ngrok with: ngrok http --domain=eclair.ngrok-free.app 8000 and set https://eclair.ngrok-free.app/vapi-webhook as your Vapi webhook URL (under Assistants -> Messaging -> server url) once and never update it again.
 
 ---
 
