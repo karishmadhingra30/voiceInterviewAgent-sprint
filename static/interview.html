@@ -141,7 +141,10 @@
           <span>Preparing your interview...<br />Researching company background.</span>
         </div>
       </div>
-      <p class="research-ready" id="research-ready-block" style="display: none;">Research complete — ready to start interview</p>
+      <div id="research-ready-block" style="display: none;">
+        <p class="research-ready">Research complete — ready to start interview</p>
+        <a id="questions-download-link" href="#" download style="font-size:0.85rem; color:#888; text-decoration:underline;">Download questions (.txt)</a>
+      </div>
       <div class="research-error-wrap" id="research-error-block" style="display: none;">
         <p class="error-msg" id="research-error-text" style="display: none; margin-top: 0;"></p>
         <a href="/static/index.html">Back to home</a>
@@ -208,6 +211,8 @@
             stopResearchPoll();
             researchLoadingBlock.style.display = 'none';
             researchReadyBlock.style.display = 'block';
+            document.getElementById('questions-download-link').href =
+              `/briefing/${encodeURIComponent(sessionId)}/questions.txt`;
             startBtn.disabled = false;
             return;
           }

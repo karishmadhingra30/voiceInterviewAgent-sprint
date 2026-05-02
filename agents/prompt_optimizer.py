@@ -1,3 +1,7 @@
+# DEPRECATED — superseded by agents/research_agent.py (DSPy PRResearchAgent).
+# DSPy BootstrapFewShot handles optimization natively; this manual generate→evaluate→rewrite
+# loop is no longer part of the active pipeline. Kept for reference only.
+
 """Self-improving loop: generate questions, evaluate, rewrite prompt until quality threshold.
 
 Runs bounded iterations, persists per-iteration artifacts and the best prompt to disk.

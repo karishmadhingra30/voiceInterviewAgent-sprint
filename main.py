@@ -273,6 +273,32 @@ async def research_status(session_id: str):
     )
 
 
+@app.get("/briefing/{session_id}/questions.txt")
+async def download_questions(session_id: str):
+    """Download a plain-text file of the questions the voice agent will ask."""
+    briefing_path = OUTPUTS_DIR / f"{session_id}_briefing.json"
+    if not await async_exists(briefing_path):
+        raise HTTPException(status_code=404, detail="Briefing not found")
+    data = json.loads(await async_read(briefing_path))
+    questions = data.get("questions", [])
+    signal_targets = data.get("signal_targets", [])
+    strategy = data.get("interview_strategy", "")
+    lines = [f"Interview Questions — Session {session_id}", "=" * 50, ""]
+    if strategy:
+        lines += ["INTERVIEW STRATEGY", "-" * 30, strategy, ""]
+    lines += ["QUESTIONS", "-" * 30]
+    for i, q in enumerate(questions, 1):
+        signal = signal_targets[i - 1] if i - 1 < len(signal_targets) else ""
+        signal_label = f"  [{signal}]" if signal else ""
+        lines.append(f"{i}. {q}{signal_label}")
+    content = "\n".join(lines) + "\n"
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(
+        content=content,
+        headers={"Content-Disposition": f'attachment; filename="questions-{session_id}.txt"'},
+    )
+
+
 @app.post("/start-interview", response_model=StartInterviewResponse)
 async def start_interview(request: StartInterviewRequest):
     """

@@ -1,3 +1,7 @@
+# DEPRECATED — superseded by agents/research_agent.py (DSPy PRResearchAgent).
+# The active pipeline uses DSPy ChainOfThought with BootstrapFewShot optimization.
+# This file is kept for reference only and is not called by main.py.
+
 """Generate interview questions from company context for newsworthy PR angles.
 
 Loads a journalist system prompt, sends transcript + context + LinkedIn + website

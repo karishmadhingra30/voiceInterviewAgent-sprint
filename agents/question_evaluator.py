@@ -1,3 +1,7 @@
+# DEPRECATED — superseded by agents/research_agent.py (DSPy PRResearchAgent).
+# The active pipeline uses DSPy's built-in optimization metric instead of this Claude-as-judge loop.
+# This file is kept for reference only and is not called by main.py.
+
 """Score generated interview questions against a human ground-truth interview.
 
 Loads ``prompts/evaluator.txt``, calls Claude as judge, and returns an

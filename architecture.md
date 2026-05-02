@@ -13,11 +13,12 @@ This system replaces that human interviewer with an AI voice agent. The agent in
 | Attribute | Value |
 |---|---|
 | Sprint Duration | 24 hours |
-| Evaluation Criteria | Completeness, Engineering Excellence, Collaboration |
 | Deployment Target | Standalone browser interface (no auth required) |
-| Output Format | .txt / .markdown for pipeline ingestion |
+| Output Format | `.md` for pipeline ingestion |
 | Voice Platform | Vapi (managed orchestration) |
-| Primary LLM | Gemini (via Vapi) + Claude (research & synthesis) |
+| LLM — Research & Synthesis | Claude Sonnet (via Anthropic API + DSPy) |
+| LLM — Voice Interview | Gemini 2.0 Flash (via Vapi) |
+| LinkedIn Scraping | Bright Data (replaces Oxylabs) |
 
 ---
 
@@ -27,16 +28,11 @@ Three approaches were evaluated:
 
 | Approach | Latency | Control | Sprint Risk | Decision |
 |---|---|---|---|---|
-| Native Voice-to-Voice (Gemini Live, OpenAI Realtime) | 300ms | Black box | High — no visibility into reasoning, stretch goals very hard | Rejected |
+| Native Voice-to-Voice (Gemini Live, OpenAI Realtime) | 300ms | Black box | High — no visibility into reasoning | Rejected |
 | Raw Orchestration (Whisper + Claude + ElevenLabs) | 800-1500ms | Full | High — WebRTC alone is a multi-day problem | Rejected |
 | Vapi (managed orchestration) | <600ms | High — Custom LLM URL for stretch goals | Low — one SDK, audio fully abstracted | **Selected** |
 
-**Key rationale:** Vapi abstracts WebRTC, STT, TTS, turn-taking, recording, and transcript generation under one SDK. This frees all engineering time for the intelligence layer — signal detection, briefing doc synthesis, and question strategy — which is the actual differentiated value.
-
-**Future-proofing:** Stretch goals are additive, not rewrites.
-- Stretch 1 (dynamic follow-ups) = point Vapi at a Custom LLM URL endpoint
-- Stretch 2 (rambling interruption) = add `stopSpeakingPlan` config and hooks
-- Zero audio code changes required for either
+**Key rationale:** Vapi abstracts WebRTC, STT, TTS, turn-taking, recording, and transcript generation under one SDK. This frees all engineering time for the intelligence layer — signal detection, question generation, DSPy optimization, and synthesis — which is the actual differentiated value.
 
 ---
 
@@ -44,10 +40,10 @@ Three approaches were evaluated:
 
 | Phase | Input | Process | Output |
 |---|---|---|---|
-| **0 — Ingestion** | .txt transcript OR audio file + Company URL + LinkedIn URL | Transcriber converts audio to text. Files normalized to clean strings. | `raw_transcript` (str), `company_url` (str), `linkedin_url` (str) |
-| **1 — Research Agent** | raw_transcript, company_url, linkedin_url | Claude reads website. Oxylabs scrapes LinkedIn. Claude synthesizes all sources against newsworthy angle framework. | `briefing_doc.json` — known facts, hypothesized angles, ranked questions, interview strategy |
-| **2 — Vapi Interview** | briefing_doc.json + founder in browser | Vapi browser SDK handles audio. Gemini LLM uses briefing doc as system prompt context. Interview runs 20-30 min. | Audio file (stored by Vapi) + raw transcript (Vapi webhook) |
-| **3 — Synthesis Agent** | Vapi transcript + briefing_doc.json | Claude reads full interview transcript. Scores each newsworthy signal. Produces structured notes. | `output.md` — scorecard + structured notes → Weida's pipeline |
+| **0 — Input Parsing** | Company folder with `1st Meeting.txt` + `Context.txt` (+ optional PDFs) | `input_parser.py` cleans/normalizes transcript, extracts URLs from context | `ParsedInput`: clean transcript, context string, extras list |
+| **1 — Research Agent** | ParsedInput | Bright Data scrapes LinkedIn. Claude reads website. DSPy `PRResearchAgent` (with `BootstrapFewShot` optimization) generates 12 interview questions across 5 signal types | `BriefingDoc`: questions, signal targets, interview strategy, known facts |
+| **2 — Vapi Interview** | BriefingDoc + founder in browser | Vapi browser SDK handles audio. Gemini 2.0 Flash uses briefing doc as system prompt. Pre-built assistant is PATCHed with session context before call. | Audio (stored by Vapi) + raw transcript (via Vapi webhook) |
+| **3 — Synthesis Agent** | Vapi transcript + BriefingDoc | Claude Sonnet reads full interview transcript, scores each signal, produces structured output | `{session_id}_output.md` — scorecard + structured notes |
 
 ---
 
@@ -55,229 +51,260 @@ Three approaches were evaluated:
 
 ```
 pressclub-sprint/
-├── main.py                    # FastAPI: all routes + CORS + Vapi webhooks
+├── main.py                        # FastAPI: all routes, CORS, Vapi webhooks, background tasks
 ├── agents/
-│   ├── research_agent.py      # Phase 1: orchestrates all research → Briefing Doc
-│   └── synthesis_agent.py     # Phase 3: transcript → scorecard + .txt output
+│   ├── research_agent.py          # DSPy PRResearchAgent — generates questions from all sources
+│   ├── synthesis_agent.py         # Phase 3: transcript → scorecard + output.md
+│   ├── question_generator.py      # DEPRECATED — standalone Claude question generator
+│   ├── question_evaluator.py      # DEPRECATED — Claude-as-judge scorer
+│   └── prompt_optimizer.py        # DEPRECATED — manual generate→evaluate→rewrite loop
 ├── services/
-│   ├── transcriber.py         # Audio/txt → clean text (Whisper)
-│   ├── crawler_service.py     # Oxylabs LinkedIn API wrapper
-│   ├── website_reader.py      # URL → structured content via Claude
-│   ├── vapi_service.py        # Vapi assistant configuration only
-│   └── storage.py             # Save .txt, .mp3, .md locally
+│   ├── input_parser.py            # Folder → ParsedInput (transcript clean, URL extraction)
+│   ├── crawler_service.py         # Bright Data LinkedIn scraper + Claude analysis
+│   ├── website_reader.py          # URL → structured content via Claude
+│   ├── vapi_service.py            # PATCH pre-built Vapi assistant with session context
+│   └── storage.py                 # Save outputs locally
 ├── prompts/
-│   ├── research.txt           # Signal detection prompt
-│   ├── interviewer.txt        # Tenacious journalist persona
-│   └── synthesizer.txt        # Newsworthy pitch generator
+│   ├── question_generator.txt     # Journalist persona prompt (auto-updated by optimizer)
+│   ├── evaluator.txt              # Claude-as-judge rubric for question scoring
+│   ├── prompt_improver.txt        # Meta-prompt: rewrites question_generator.txt
+│   ├── linkedin_analyzer.txt      # Structures raw LinkedIn data for PR signals
+│   ├── synthesizer.txt            # Newsworthy pitch generator prompt
+│   └── website_reader.txt         # Website content extraction prompt
 ├── static/
-│   ├── index.html             # Upload form: transcript + URLs
-│   ├── interview.html         # Active call page (Vapi browser SDK)
-│   └── results.html           # Scorecard + transcript + download
+│   ├── index.html                 # Upload form: transcript paste + optional URLs
+│   ├── interview.html             # Active call page (Vapi browser SDK)
+│   └── results.html               # Scorecard + transcript + download
 ├── tests/
-│   ├── benchmark.py           # All step benchmarks with pass/fail output
-│   └── fixtures/
-│       ├── sample_transcript.txt
-│       ├── expected_briefing.json
-│       └── expected_scorecard.txt
-├── .env                       # All API keys (never committed)
-├── .env.example               # Key template for collaborators
-├── requirements.txt
-└── README.md
+│   ├── benchmark.py               # Step benchmarks with pass/fail output
+│   ├── fixtures/                  # Training data (Clarasight, Knowidea, LastMile, PineTree, Aisa)
+│   │   └── {Company}/
+│   │       ├── 1st Meeting.txt    # First sales call (input transcript)
+│   │       ├── 2nd Meeting.txt    # Second meeting (ground truth for optimizer)
+│   │       └── Context.txt        # Company background + URLs
+│   └── optimization_results/      # Persisted optimizer outputs
+│       ├── best_prompt.txt        # Best question_generator.txt found so far
+│       ├── best_score.txt         # Score of best prompt
+│       ├── optimized_agent.json   # Serialized DSPy agent weights
+│       └── iteration_{n}.json     # Per-iteration scores, questions, feedback
+├── data/
+│   ├── Training/                  # Original training sets (5 companies)
+│   ├── Validation/                # Validation sets (Ascend, Autositu)
+│   └── outputs/                   # Runtime outputs per session
+│       ├── {session_id}_status.txt
+│       ├── {session_id}_briefing.json
+│       ├── {session_id}_transcript.txt
+│       └── {session_id}_output.md
+├── .env                           # All API keys (never committed)
+├── .env.example                   # Key template for collaborators
+└── requirements.txt
 ```
 
 ---
 
 ## 5. Services — Detailed Spec
 
-### 5.1 `transcriber.py`
-Converts any input format to clean transcript text.
+### 5.1 `input_parser.py`
+Converts raw company folder into clean `ParsedInput`. Handles two transcript formats:
 
-| Input | Process | Output |
-|---|---|---|
-| `.txt` file | Read file directly | String |
-| Audio file (`.mp3`/`.wav`) | Whisper API transcription | String |
+| Format | Description |
+|---|---|
+| Format A (labeled_sameline) | `Me: ...` / `Them: ...` speaker lines → relabeled to `PRESSCLUB` / `CUSTOMER` |
+| Format B (timestamped_nextline) | `[HH:MM:SS AM/PM] Name:` headers with content on next line |
 
-- **Tools:** `openai.Audio.transcribe` (Whisper), Python file I/O
-- **Pass criteria:** `.txt` = 100% accuracy. Audio = >90% word accuracy, <30s runtime.
+- Drops short acknowledgement-only filler lines (`okay`, `yes`, `wow`, etc.)
+- Extracts PDFs via PyMuPDF for extra context
+- `extract_urls()` splits context into LinkedIn URLs and website URLs
+- `load_ground_truth()` returns raw `2nd Meeting.txt` (used by optimizer only)
 
 ---
 
 ### 5.2 `crawler_service.py`
-Wraps Oxylabs LinkedIn scraper API. Returns normalized founder/company profile.
+Wraps **Bright Data** LinkedIn dataset API. Triggers a snapshot job, polls until ready, returns up to 6000 chars of raw profile data. Claude then structures it into a `LinkedInProfile`.
 
-| Field Extracted | Used For |
-|---|---|
-| Name + current role | Personalization in interview |
-| Company name + stage | Signal context |
-| Work history highlights | Founder uniqueness signal (1-in-10,000 rarity check) |
-| Education | Secondary signal |
-
-- **Pass criteria:** Required fields present, manual accuracy check vs actual LinkedIn page, <10s runtime.
+Fallback chain:
+1. Bright Data scrape → Claude analysis
+2. Context text fallback (partial — research agent uses transcript as primary)
+3. Empty profile with error (pipeline continues, transcript is sole source)
 
 ---
 
 ### 5.3 `website_reader.py`
-Passes company URL to Claude with web access. Extracts structured content.
-
-| Field Extracted | Newsworthy Signal |
-|---|---|
-| Product description | World-first or world-best positioning |
-| Metrics mentioned | Traction signals, benchmark improvements |
-| Funding mentioned | Funding announcement signals |
-| Customer names | Quality traction (Fortune 500 vs general) |
-
-- **Pass criteria:** Zero hallucinated facts (verified against actual site), key fields present, <15s runtime.
+Passes company URL to Claude with `prompts/website_reader.txt`. Extracts product description, metrics, funding, and customer signals.
 
 ---
 
 ### 5.4 `vapi_service.py`
-Configures and creates a Vapi assistant. Injects briefing doc into system prompt. Returns `assistant_id` for browser SDK.
+**PATCHes a pre-built Vapi assistant** (does not create a new one per session). Injects the session's system prompt and metadata before each call. Returns `VAPI_ASSISTANT_ID` for the browser SDK.
 
-- **MVP:** Uses Vapi built-in Gemini LLM
-- **Stretch 1:** Replace model config with Custom LLM URL pointing to FastAPI `/chat/completions` endpoint
+The system prompt is built by `build_system_prompt()`:
+- Persona: Riley, senior tech journalist
+- Behavioral rules (push for exact numbers, handle rambling, no vague quantifiers)
+- Interview strategy from briefing doc
+- Known facts block (do not re-ask)
+- Question bank (12 questions, ordered by signal priority)
+
+`stopSpeakingPlan` is configured: `numWords=5`, `voiceSeconds=0.3`, `backoffSeconds=1.0`.
 
 ---
 
 ### 5.5 `storage.py`
-Saves all outputs locally. Structured for easy S3 migration as stretch goal.
-
-| File | When Saved |
-|---|---|
-| `briefing_doc.json` | After research agent completes |
-| `interview_audio.mp3` | After Vapi call ends (Vapi provides URL) |
-| `interview_transcript.txt` | After Vapi webhook fires |
-| `output.md` | After synthesis agent completes |
+Saves outputs locally. Structured for easy S3 migration.
 
 ---
 
 ## 6. Agents — Detailed Spec
 
-### 6.1 `research_agent.py`
-Orchestrates Phase 1 end-to-end. The quality of the briefing doc determines the quality of the entire interview.
+### 6.1 `research_agent.py` — DSPy `PRResearchAgent`
+The core intelligence layer. Uses **DSPy** with `ChainOfThought` over the `NewsAngleInterviewer` signature.
 
-#### Tools defined:
+#### DSPy Signature inputs/outputs:
 
-| Tool Name | Description | Input | Output |
-|---|---|---|---|
-| `parse_transcript` | Extract key facts from sales call text | raw transcript string | facts dict |
-| `read_website` | Calls website_reader.py | company URL | structured content dict |
-| `scrape_linkedin` | Calls crawler_service.py | LinkedIn URL | profile dict |
-| `synthesize_briefing` | Claude synthesizes all sources into briefing doc | facts + website + linkedin | briefing_doc.json |
+| Field | Type | Description |
+|---|---|---|
+| `transcript` | Input | Cleaned 1st meeting transcript (truncated to 6000 chars) |
+| `context` | Input | Company background text (truncated to 1000 chars) |
+| `linkedin_data` | Input | Structured LinkedIn profile (truncated to 2000 chars) |
+| `website_data` | Input | Company website content (truncated to 2000 chars) |
+| `questions` | Output | 12 interview questions covering all 5 signal types |
+| `signal_targets` | Output | Signal type per question: funding/product/traction/founder/insight |
+| `interview_strategy` | Output | Paragraph identifying 2-3 strongest signals |
 
-#### Newsworthy angle framework applied:
-1. **Funding signals** — $1M+ general tech, $10M+ B2B SaaS (TechCrunch threshold)
-2. **Product signals** — world-first or world-best positioning, benchmark improvements (performance/cost %)
-3. **Traction signals** — revenue milestones, growth rate (format: "hits $X in Y timeframe"), Fortune 500 quality
-4. **Founder signals** — 1-in-10,000 unique experience or background
-5. **Insight signals** — contrarian data (e.g. industry avg 40% return rate vs client's 15%)
+#### DSPy Optimization:
+On first run, `optimize_agent()` uses `BootstrapFewShot` with `max_bootstrapped_demos=2` against 4 training companies (Clarasight, Knowidea, LastMile, PineTree — Aisa excluded). Optimized weights saved to `tests/optimization_results/optimized_agent.json` and reloaded on subsequent runs.
 
-#### Output schema — `briefing_doc.json`:
+Metric: F1 score on keyword overlap between generated and ground truth questions (70% weight) + signal type coverage across all 5 types (30% weight).
+
+#### Output — `BriefingDoc`:
 ```json
 {
-  "known_facts": [],
-  "hypothesized_angles": [],
-  "priority_questions": [],
+  "session_id": "",
+  "company_folder": "",
+  "questions": [],
+  "signal_targets": [],
   "interview_strategy": "",
-  "avoid_topics": []
+  "known_facts": [],
+  "errors": []
 }
 ```
 
-- **Pass criteria:** Signal recall >80% vs Weida ground truth. False positives <2. Question quality rated >7/10 by Weida on 3 training sets. <60s runtime.
+---
+
+### ~~6.2 `question_generator.py`~~ — DEPRECATED
+> **Not used by the active pipeline.** Superseded by `research_agent.py`. Was a standalone Claude-based question generator that loaded `prompts/question_generator.txt` and returned a structured `QuestionSet`. DSPy `PRResearchAgent` replaced this approach entirely.
+
+### ~~6.3 `question_evaluator.py`~~ — DEPRECATED
+> **Not used by the active pipeline.** Superseded by `research_agent.py`. Was a Claude-as-judge scorer that evaluated questions against `2nd Meeting.txt` ground truth. DSPy's built-in `BootstrapFewShot` metric handles optimization natively.
+
+### ~~6.4 `prompt_optimizer.py`~~ — DEPRECATED
+> **Not used by the active pipeline.** Superseded by `research_agent.py`. Was a manual generate → evaluate → rewrite loop (up to 10 iterations, score threshold 0.80). Replaced by DSPy which handles all of this internally.
 
 ---
 
 ### 6.2 `synthesis_agent.py`
-Runs after Vapi call ends. Reads full interview transcript against the briefing doc. Produces final output for Weida's pipeline.
+Runs after Vapi call ends. Triggered by Vapi webhook. Reads full interview transcript against briefing doc. Uses `prompts/synthesizer.txt`.
 
-#### Output — `output.md`:
-- Timestamped interview transcript
-- Newsworthy scorecard — each signal marked `confirmed` / `unconfirmed` / `needs follow-up`
-- Structured interview notes keyed to signal type
-- Recommended pitch angle (top 1-2 signals worth pursuing)
+#### Output — `{session_id}_output.md` sections:
+- **Interview Summary** — one paragraph overview
+- **Newsworthy Scorecard** — each signal marked `confirmed` / `unconfirmed` / `needs follow-up` with evidence quote
+- **Structured Interview Notes** — key findings by signal type
+- **Recommended Pitch Angle** — top 1-2 signals with specific data points
+- **Transcript (Timestamped)** — full interview transcript
 
-- **Pass criteria:** Scorecard accuracy verified against 2 validation sets. Output format confirmed by Weida as pipeline-compatible. <30s runtime post-call.
-
----
-
-## 7. Prompts
-
-### 7.1 `research.txt` — Signal Detection
-Instructs Claude how to read a sales transcript and map content to the newsworthy angle framework. Specifies output schema. Emphasizes: never fabricate, only extract what is explicitly stated or strongly implied.
-
-### 7.2 `interviewer.txt` — Journalist Persona
-Defines the Vapi agent persona:
-- **Persona:** Senior tech journalist, 10 years covering B2B SaaS and deep tech
-- **Tone:** Curious, warm, but persistent — does not accept vague answers
-- **Strategy:** Always asks for specific numbers, not generalizations
-- **Briefing doc injected:** Knows what to ask and what to skip
-- **Fallback:** If founder deflects, reframes and asks again from a different angle
-
-### 7.3 `synthesizer.txt` — Pitch Generator
-Instructs Claude how to map interview transcript to newsworthy signals. Applies PressClub's specific thresholds ($1M/$10M, world-first requirement, Fortune 500 quality bar). Produces scorecard in consistent format for pipeline ingestion.
+Signal types scored: `funding`, `product_world_first`, `product_world_best`, `traction_revenue`, `traction_growth`, `traction_quality`, `founder_uniqueness`, `insight_contrarian`
 
 ---
 
-## 8. API Routes — `main.py`
+## 7. API Routes — `main.py`
 
 | Method | Route | Description |
 |---|---|---|
-| `POST` | `/research` | Accepts transcript + URLs, runs research agent, returns `briefing_doc.json` |
-| `POST` | `/start-interview` | Creates Vapi assistant with briefing doc, returns `assistant_id` for browser SDK |
-| `POST` | `/vapi-webhook` | Receives post-call transcript from Vapi, triggers synthesis agent |
-| `GET` | `/results/{session_id}` | Returns scorecard + transcript for results page |
-| `GET` | `/static/*` | Serves HTML frontend files |
+| `GET` | `/` | Serves `static/index.html` |
+| `POST` | `/research` | Accepts transcript + optional URLs/context. Starts research agent as `BackgroundTasks`. Returns `session_id` immediately. Writes `status=processing` before returning to prevent race condition on first poll. |
+| `GET` | `/research/status/{session_id}` | Poll for research completion. Returns `processing` / `ready` / `error` plus briefing doc when ready. |
+| `POST` | `/start-interview` | PATCHes pre-built Vapi assistant with briefing doc system prompt. Returns `vapi_assistant_id` for browser SDK. |
+| `POST` | `/vapi-webhook` | Receives Vapi `end-of-call-report`. Extracts transcript, resolves `session_id` from call metadata (with fallbacks to assistant name and assistant metadata). Saves transcript, fires synthesis agent as `asyncio.create_task`. |
+| `GET` | `/results/{session_id}` | Returns synthesis output, briefing doc, and transcript for results page. Returns `status=processing` if output not yet written. |
+| `GET` | `/static/*` | Served via `StaticFiles` mount |
+
+### Session ID Resolution in Webhook
+`session_id` lookup priority:
+1. `message.call.metadata.session_id` (set by `vapi_service` during PATCH)
+2. Assistant name: `PressClub-{session_id}` (fallback)
+3. `message.assistant.metadata.session_id` (second fallback)
 
 ---
 
-## 9. Stretch Goals
+## 8. Data Flow — Session Lifecycle
 
-| Goal | What Changes | Files Modified | Estimated Time |
-|---|---|---|---|
-| **Stretch 1:** Dynamic follow-ups | Add `/chat/completions` FastAPI endpoint. Point Vapi model config to Custom LLM URL. Add signal-checking logic between turns. | `main.py` (+1 route), `vapi_service.py` (model config change only) | 2-3 hours |
-| **Stretch 2:** Rambling interruption | Add `stopSpeakingPlan` config to Vapi assistant. Add `user-interrupted` hook that injects redirect message into LLM context. | `vapi_service.py` (config addition only) | 1 hour |
-
----
-
-## 10. Benchmarks & Testing
-
-| Step | Functional Test | Quality Benchmark | Pass Criteria |
-|---|---|---|---|
-| Step 1: Input Handler | txt and audio load without error | Audio spot-check vs ground truth | txt 100%, audio >90% word accuracy, <30s |
-| Step 2: LinkedIn Scraper | Oxylabs API returns 200 | Manual check vs actual LinkedIn | All required fields present, <10s |
-| Step 3: Website Reader | Claude returns non-empty output | Zero hallucinated facts | Key fields present, verified vs site, <15s |
-| Step 4: Briefing Doc | Valid JSON, all fields present | Compare signals vs Weida ground truth | >80% signal recall, <2 false positives, >7/10 quality |
-| Step 5: Vapi Assistant | Test call connects, agent speaks | On-topic rate, briefing doc usage | >90% on-topic, never asks known facts |
-| Step 6: Browser Interface | Page loads, mic permission fires | Works Chrome + Safari | <3s load, <5s to first speech |
-| Step 7: Synthesis | Webhook received, .md file created | Scorecard vs validation sets | Weida confirms pipeline compatible |
-| Step 8: Results Page | Renders without errors | Data matches output file | Download works, scorecard visible |
-
----
-
-## 11. Environment Variables
-
-```bash
-ANTHROPIC_API_KEY=        # Claude API — research + synthesis agents
-VAPI_API_KEY=             # Vapi — voice orchestration
-GEMINI_API_KEY=           # Gemini — LLM inside Vapi
-OXYLABS_USERNAME=         # LinkedIn scraper
-OXYLABS_PASSWORD=         # LinkedIn scraper
-OPENAI_API_KEY=           # Whisper — audio transcription
+```
+User pastes transcript + context into index.html
+        ↓
+POST /research → session_id returned immediately
+        ↓
+BackgroundTasks: parse_input_folder → scrape_linkedin + read_website (parallel)
+        → PRResearchAgent (DSPy) → BriefingDoc saved as {session_id}_briefing.json
+        ↓
+Frontend polls GET /research/status/{session_id} every 3s
+        ↓ (status=ready)
+User sees briefing doc on interview.html
+        ↓
+POST /start-interview → PATCH Vapi assistant with session system prompt
+        → returns vapi_assistant_id
+        ↓
+Vapi browser SDK starts call with vapi_assistant_id
+        ↓
+Interview runs (Gemini 2.0 Flash via Vapi, guided by question bank)
+        ↓
+Call ends → Vapi fires POST /vapi-webhook (end-of-call-report)
+        → transcript extracted, session_id resolved
+        → asyncio.create_task: synthesis_agent runs
+        ↓
+User redirected to results.html
+        ↓
+Frontend polls GET /results/{session_id} until output.md ready
 ```
 
 ---
 
-## 12. Build Order — Hour by Hour
+## 9. Newsworthy Signal Framework
 
-| Hour | Task | Deliverable | Benchmark |
-|---|---|---|---|
-| Hour 1 | `transcriber.py` + `crawler_service.py` + `website_reader.py` | All three services running independently | Steps 1-3 pass |
-| Hour 2 | `research_agent.py` + `prompts/research.txt` | Briefing doc produced from training input | Step 4 passes vs Weida ground truth |
-| Hour 3 | `vapi_service.py` + `prompts/interviewer.txt` + `main.py` skeleton | Vapi assistant created, test call connects | Step 5 passes |
-| Hour 4 | `static/interview.html` + `static/index.html` + Vapi webhook route | End-to-end: upload → interview → transcript received | Step 6 passes |
-| Hour 5 | `synthesis_agent.py` + `prompts/synthesizer.txt` + `static/results.html` | Full pipeline working | Steps 7-8 pass |
-| Buffer | `requirements.txt` + README + `.env.example` + cleanup | Repo ready for Weida review | All steps green |
-| Stretch | Custom LLM URL + `stopSpeakingPlan` if time permits | Dynamic follow-ups working | Stretch benchmarks pass |
+The five signal types applied throughout the pipeline:
+
+1. **Funding** — $1M+ general tech, $10M+ B2B SaaS (TechCrunch threshold)
+2. **Product** — world-first or world-best positioning, benchmark improvements (performance/cost %)
+3. **Traction** — revenue milestones, growth rate ("hits $X in Y timeframe"), Fortune 500 quality
+4. **Founder** — 1-in-10,000 unique experience or background
+5. **Insight** — contrarian data (e.g. industry avg 40% return rate vs client's 15%)
 
 ---
 
-*PressClub AI Voice Interviewer — Architecture v1.0 — Sprint May 2026*
+## 10. Environment Variables
+
+```bash
+ANTHROPIC_API_KEY=        # Claude API — research agent (DSPy), synthesis, optimizer
+VAPI_API_KEY=             # Vapi — voice orchestration REST API
+VAPI_ASSISTANT_ID=        # Pre-built Vapi assistant ID (PATCHed per session)
+BRIGHTDATA_API_KEY=       # Bright Data — LinkedIn scraper
+BRIGHTDATA_DATASET_ID=    # Bright Data dataset ID for LinkedIn profiles
+```
+
+Note: `GEMINI_API_KEY` and `OPENAI_API_KEY` are **not required** — Gemini runs inside Vapi (no direct API call), and audio transcription via Whisper was removed in favor of Vapi's built-in transcript.
+
+---
+
+## 11. Key Design Decisions Made During Sprint
+
+| Decision | Why |
+|---|---|
+| DSPy `BootstrapFewShot` for research agent | Automatically improves question quality using training examples without manual prompt iteration |
+| PATCH pre-built assistant instead of POST new one | Avoids Vapi rate limits from creating many assistants per demo; simpler session management |
+| `BackgroundTasks` for research, `asyncio.create_task` for synthesis | Research must not block the HTTP response. Synthesis is fire-and-forget after webhook ACK. |
+| Status file written before `add_task` | Prevents 404 on first poll before background task starts |
+| Three-level session_id fallback in webhook | Vapi metadata propagation is unreliable — assistant name and metadata provide safety net |
+| `Bright Data` replacing Oxylabs | Switched LinkedIn scraper provider; same fallback chain preserved |
+| `input_parser.py` handles two transcript formats | Training data came in two formats (labeled same-line vs timestamped next-line); both normalized to PRESSCLUB/CUSTOMER |
+
+---
+
+*PressClub AI Voice Interviewer — Architecture v2.0 — Sprint May 2026*
