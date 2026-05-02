@@ -259,10 +259,15 @@ async def start_interview(request: StartInterviewRequest):
 
     from services.vapi_service import create_vapi_assistant
 
-    assistant_id = await create_vapi_assistant(
-        briefing_doc=briefing_doc,
-        session_id=request.session_id,
-    )
+    try:
+        assistant_id = await create_vapi_assistant(
+            briefing_doc=briefing_doc,
+            session_id=request.session_id,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return StartInterviewResponse(
         status="ok",
