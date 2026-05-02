@@ -20,4 +20,4 @@ pip install -r requirements.txt
 Add API keys to .env (see .env.example)
 python main.py
 
-Link to Architecture - 
+Full system design → [ARCHITECTURE.md](./ARCHITECTURE.md)
